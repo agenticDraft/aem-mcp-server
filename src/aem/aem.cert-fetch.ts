@@ -9,9 +9,14 @@
  * it. When no certificate is configured every export here is inert.
  */
 
+import https from 'node:https';
+import type { IncomingHttpHeaders } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createSecureContext } from 'node:tls';
 import { createAEMError, AEM_ERROR_CODES } from './aem.errors.js';
+
+/** Mirrors the transport signature AEMFetch already abstracts over. */
+export type FetchInstance = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
 
 /** The subset of CliParams this module reads. CliParams satisfies it structurally. */
 export type CertParams = {
@@ -147,4 +152,129 @@ export function assertCertHosts(material: CertMaterial | null, hosts: NamedHost[
     `A client certificate is configured, but these hosts are not https://: ${offenders}. `
     + 'The certificate cannot be presented over plaintext HTTP. Loopback hosts are exempt.',
   );
+}
+
+/**
+ * Bodies reaching this transport are string or URLSearchParams — see
+ * `AEMFetch.post`/`put`, which JSON-stringify everything else. Anything unexpected
+ * throws rather than being silently serialised as "[object Object]".
+ */
+function normaliseBody(body: BodyInit | null | undefined): Buffer | null {
+  if (body === null || body === undefined) return null;
+  if (typeof body === 'string') return Buffer.from(body, 'utf8');
+  if (body instanceof URLSearchParams) return Buffer.from(body.toString(), 'utf8');
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  throw new TypeError(
+    'Unsupported request body for the client certificate transport: '
+    + `${(body as any)?.constructor?.name || typeof body}. `
+    + 'Supported: string, URLSearchParams, Buffer, Uint8Array.',
+  );
+}
+
+/** node:http exposes repeated headers as arrays; Headers wants them appended. */
+function toHeaders(raw: IncomingHttpHeaders): Headers {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(raw)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const entry of value) headers.append(name, entry);
+    } else {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
+/**
+ * Build a `FetchInstance` that presents the client certificate on every request.
+ *
+ * Returns a genuine global `Response`, so callers cannot tell which transport they
+ * were given: `request()` and `postWithHeaders()` keep using `.ok`, `.status`,
+ * `.headers.get()`, `.clone()` and `.text()` unchanged.
+ *
+ * Global `fetch` cannot do this — it has no way to attach client TLS material
+ * without an undici dispatcher, and undici is not a dependency here.
+ */
+export function makeCertFetch(material: CertMaterial): FetchInstance {
+  // ONE agent for the whole process. Keep-alive pooling measured flat at a single
+  // socket across 200 sequential calls, so there is no descriptor leak to manage.
+  const agent = new https.Agent({
+    cert: material.cert,
+    key: material.key,
+    ca: material.ca,
+    passphrase: material.passphrase,
+    keepAlive: true,
+    minVersion: 'TLSv1.2',
+  });
+
+  return (input, init = {}) => new Promise<Response>((resolve, reject) => {
+    let url: URL;
+    try {
+      url = new URL(String(input));
+    } catch {
+      reject(new TypeError(`Invalid URL for the client certificate transport: ${String(input)}`));
+      return;
+    }
+
+    let headers: Record<string, string>;
+    let body: Buffer | null;
+    try {
+      headers = {};
+      new Headers(init.headers || {}).forEach((value, name) => { headers[name] = value; });
+      body = normaliseBody(init.body);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    // https.request would otherwise fall back to chunked encoding, which some
+    // Sling POST endpoints handle poorly.
+    if (body) headers['content-length'] = String(body.byteLength);
+
+    const req = https.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port,
+        path: `${url.pathname}${url.search}`,
+        method: init.method || 'GET',
+        headers,
+        agent,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('error', reject);
+        res.on('end', () => {
+          const status = res.statusCode ?? 0;
+          // The Response constructor rejects a body on these statuses.
+          const payload = status === 204 || status === 304 ? null : Buffer.concat(chunks);
+          resolve(new Response(payload, {
+            status,
+            statusText: res.statusMessage || '',
+            headers: toHeaders(res.headers),
+          }));
+        });
+      },
+    );
+
+    req.on('error', reject);
+
+    // AEMFetch drives cancellation through AbortController (see getTimeoutOptions).
+    if (init.signal) {
+      if (init.signal.aborted) {
+        req.destroy(new Error('Request aborted'));
+      } else {
+        init.signal.addEventListener(
+          'abort',
+          () => req.destroy(new Error('Request aborted')),
+          { once: true },
+        );
+      }
+    }
+
+    if (body) req.write(body);
+    req.end();
+  });
 }
