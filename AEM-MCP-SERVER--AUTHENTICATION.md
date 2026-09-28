@@ -145,4 +145,6 @@ The certificate lives in one small module and enters the request path at a singl
 
 ---
 
-Source: [github.com/agenticDraft/aem-mcp-server](https://github.com/agenticDraft/aem-mcp-server) · forked from [easingthemes/aem-mcp-server](https://github.com/easingthemes/aem-mcp-server) · [linkedin.com/in/zoranzokimarkovic](https://www.linkedin.com/in/zoranzokimarkovic/)
+Zoran Markovic · [linkedin.com/in/zoranzokimarkovic](https://www.linkedin.com/in/zoranzokimarkovic/)
+
+Source: [github.com/agenticDraft/aem-mcp-server](https://github.com/agenticDraft/aem-mcp-server) · forked from [easingthemes/aem-mcp-server](https://github.com/easingthemes/aem-mcp-server)
