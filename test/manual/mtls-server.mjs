@@ -17,6 +17,12 @@
  *   /_204      -> 204 with no body      (empty-response handling)
  *   /_redirect -> 302 with Location     (one-hop redirect handling)
  *   anything   -> 200 JSON echo of method, path, headers and body
+ *
+ * Credential checking is opt-in, so running the stub by hand stays permissive:
+ *   STUB_BASIC="admin:admin,other:secret"   accepted Basic user:pass pairs
+ *   STUB_BEARER="token1,token2"             accepted Bearer tokens
+ * When either is set, any other Authorization gets 401 and logs auth=rejected.
+ * Unset, every request logs auth=unchecked.
  */
 
 import https from 'node:https';
@@ -40,6 +46,20 @@ try {
   process.exit(1);
 }
 
+const list = (value) => (value ? value.split(',').map((s) => s.trim()).filter(Boolean) : []);
+const ACCEPTED_BASIC = new Set(list(process.env.STUB_BASIC).map((pair) => Buffer.from(pair).toString('base64')));
+const ACCEPTED_BEARER = new Set(list(process.env.STUB_BEARER));
+const CHECKING = ACCEPTED_BASIC.size > 0 || ACCEPTED_BEARER.size > 0;
+
+/** 'ok' | 'rejected' when checking is on, 'unchecked' otherwise. */
+function checkAuthorization(value) {
+  if (!CHECKING) return 'unchecked';
+  const [scheme, credential] = (value || '').split(' ');
+  if (scheme === 'Basic' && ACCEPTED_BASIC.has(credential)) return 'ok';
+  if (scheme === 'Bearer' && ACCEPTED_BEARER.has(credential)) return 'ok';
+  return 'rejected';
+}
+
 /** Keep the scheme, drop the credential — this prints to a shared terminal. */
 function redactAuthorization(value) {
   if (!value) return '<absent>';
@@ -53,6 +73,7 @@ const server = https.createServer(
     const peer = req.socket.getPeerCertificate();
     const clientCN = peer?.subject?.CN || '<none>';
     const authorization = redactAuthorization(req.headers.authorization);
+    const auth = checkAuthorization(req.headers.authorization);
 
     const chunks = [];
     req.on('data', (chunk) => chunks.push(chunk));
@@ -60,9 +81,14 @@ const server = https.createServer(
       const body = Buffer.concat(chunks).toString('utf8');
       console.log(
         `clientCN=${clientCN} ${req.method} ${req.url} `
-        + `authorization=${authorization} content-type=${req.headers['content-type'] || '<absent>'}`
+        + `authorization=${authorization} auth=${auth} content-type=${req.headers['content-type'] || '<absent>'}`
         + (body ? ` bodyBytes=${body.length}` : ''),
       );
+
+      if (auth === 'rejected') {
+        res.writeHead(401, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized', auth }));
+        return;
+      }
 
       if (req.url === '/_204') {
         res.writeHead(204).end();
@@ -79,6 +105,7 @@ const server = https.createServer(
         method: req.method,
         path: req.url,
         authorization,
+        auth,
         contentType: req.headers['content-type'] || null,
         body,
       }, null, 2));
