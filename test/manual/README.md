@@ -79,8 +79,6 @@ point of the design. The credential itself is redacted because this prints to a 
 
 ## Using it against the MCP server
 
-Once the CLI flags exist:
-
 ```bash
 node dist/cli.js -H https://localhost:14502 \
   --cert test/manual/certs/client.pem \
@@ -94,3 +92,58 @@ The stub should log both `clientCN=test-client` and `authorization=Basic <redact
 For the encrypted-key path, use `client.encrypted.key` and export
 `AEM_KEY_PASSPHRASE=testpass`. There is deliberately no CLI flag for the passphrase, so it never
 appears in `ps aux`.
+
+## OAuth S2S + client certificate, without real credentials
+
+```bash
+node test/manual/smoke-oauth-cert.mjs
+```
+
+Builds an `AEMConnector` with `-i/-s` plus `--cert/--key/--ca` against the stub. The IMS token call
+(`src/aem/aem.auth.ts`) goes through global `fetch`, while the AEM leg in cert mode goes through
+`node:https`. So the script replaces global `fetch` with a fake IMS that returns a dummy token, and
+every AEM request still makes a real mTLS handshake with the stub.
+
+It asserts:
+
+- the connector is in OAuth (AEMaaCS) mode;
+- the token was requested from IMS exactly once, via global `fetch`, with the configured
+  `client_id` and `grant_type=client_credentials`;
+- the stub saw `clientCN=test-client` **and** `Authorization: Bearer …` on the same request;
+- no AEM request went through global `fetch`.
+
+What it does **not** prove: that real Adobe IMS accepts real credentials, or that a real
+AEMaaCS environment accepts the token behind an mTLS-terminating Dispatcher/CDN. That is the
+pending check below.
+
+## TODO — before merging the final PR: real IMS credentials
+
+**Status: not done.** Nobody on this branch has had real OAuth Server-to-Server credentials. Run
+this on the `cert-auth` branch once the final PR is open, and tick it off in the PR's test plan.
+
+Needs: `clientId`/`clientSecret` from an Adobe Developer Console project with an OAuth
+Server-to-Server credential for an AEM as a Cloud Service environment, plus a client certificate
+that environment's Dispatcher/CDN accepts (or, if no mTLS-protected environment exists, the stub).
+
+1. `npm ci && npm run build`
+2. **Real IMS + stub** — proves the real token is fetched and sent over mTLS:
+
+   ```bash
+   bash test/manual/gen-certs.sh
+   node test/manual/mtls-server.mjs          # other terminal
+   node dist/cli.js -H https://localhost:14502 \
+     -i "$AEM_CLIENT_ID" -s "$AEM_CLIENT_SECRET" \
+     --cert test/manual/certs/client.pem --key test/manual/certs/client.key \
+     --ca test/manual/certs/ca.pem
+   ```
+
+   Drive one `tools/call` (e.g. `getNodeContent`) via POST `/mcp`. Expect no IMS error on stderr, and
+   the stub logs `clientCN=test-client … authorization=Bearer <redacted>`.
+3. **Real environment** (only if an mTLS-protected AEMaaCS environment exists): same command with
+   `-H https://<author-host>` and that environment's client cert/key (plus `--ca` only if its
+   server certificate is not publicly trusted). Expect `/health` → `"aem":"connected"` and a
+   `getNodeContent` call returning real content.
+4. **Negative control**: repeat step 3 without `--cert/--key` — expect a TLS handshake failure, not
+   a 401. Confirms step 3 actually depended on the certificate.
+
+Record in the PR: date, who ran it, which steps (2 only, or 2–4), and the result.
