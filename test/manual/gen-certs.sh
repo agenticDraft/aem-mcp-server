@@ -54,7 +54,9 @@ openssl x509 -req -in client.csr \
 
 # An encrypted copy of the same key, for exercising the AEM_KEY_PASSPHRASE path.
 echo "==> Encrypted client key (passphrase: ${KEY_PASSPHRASE})"
-openssl pkcs8 -topk8 -in client.key -out client.encrypted.key \
+# -v2 aes-256-cbc: LibreSSL (macOS system openssl) otherwise defaults to pbeWithMD5AndDES-CBC,
+# which Node's OpenSSL 3 rejects as "digital envelope routines::unsupported".
+openssl pkcs8 -topk8 -v2 aes-256-cbc -in client.key -out client.encrypted.key \
   -passout "pass:${KEY_PASSPHRASE}" 2>/dev/null
 
 # A second CA and a client signed by it: presenting this to the stub must be
