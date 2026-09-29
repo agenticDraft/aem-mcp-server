@@ -19,6 +19,12 @@ const argv = yargs(hideBin(process.argv)).options({
     describe: 'Interface the http transport listens on (env MCP_HOST). /mcp is unauthenticated: '
       + 'use 0.0.0.0 only behind your own access control',
   },
+  allowedOrigins: {
+    type: 'string',
+    default: process.env.MCP_ALLOWED_ORIGINS || '',
+    describe: 'Extra browser origins allowed to call the http transport, comma-separated '
+      + '(env MCP_ALLOWED_ORIGINS). Loopback origins are always allowed; "*" disables the check',
+  },
   transport: {
     type: 'string',
     default: 'http' as const,
@@ -58,8 +64,8 @@ if (argv.help) {
   process.exit(0);
 }
 
-const { host, user, pass, mcpPort, mcpHost, id, secret, transport, instances, cert, key, ca } = argv;
-const params: CliParams = { host, user, pass, mcpPort, mcpHost, id, secret, instances, cert, key, ca };
+const { host, user, pass, mcpPort, mcpHost, allowedOrigins, id, secret, transport, instances, cert, key, ca } = argv;
+const params: CliParams = { host, user, pass, mcpPort, mcpHost, allowedOrigins, id, secret, instances, cert, key, ca };
 
 if (transport === 'stdio') {
   startStdio(params);
