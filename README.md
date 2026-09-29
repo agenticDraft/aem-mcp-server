@@ -90,6 +90,11 @@ Then point your AI agent to the URL:
 }
 ```
 
+The http server listens on `127.0.0.1` only. The `/mcp` endpoint has no authentication, so
+anyone who can reach the port can run AEM operations with the server's credentials. To accept
+connections from other machines, pass `--mcpHost 0.0.0.0` (or set `MCP_HOST`) and put your own
+access control in front of it.
+
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=AEM&config=eyJ1cmwiOiJodHRwOi8vMTI3LjAuMC4xOjg1MDIvbWNwIn0%3D)
 
 ### Configuration
@@ -103,6 +108,9 @@ Options:
   -i, --id         clientId                               [string] [default: ""]
   -s, --secret     clientSecret                           [string] [default: ""]
   -m, --mcpPort                                         [number] [default: 8502]
+      --mcpHost    Interface the http transport listens on (env MCP_HOST). /mcp
+                   is unauthenticated: use 0.0.0.0 only behind your own access
+                   control                       [string] [default: "127.0.0.1"]
   -t, --transport  Transport mode: http (default) or stdio
                            [string] [choices: "http", "stdio"] [default: "http"]
   -I, --instances  Named AEM instances: "local:http://localhost:4502:admin:admin
