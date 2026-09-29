@@ -13,6 +13,12 @@ const argv = yargs(hideBin(process.argv)).options({
   id: { type: 'string', default: '', alias: 'i', describe: 'clientId' },
   secret: { type: 'string', default: '', alias: 's', describe: 'clientSecret' },
   mcpPort: { type: 'number', default: 8502, alias: 'm' },
+  mcpHost: {
+    type: 'string',
+    default: process.env.MCP_HOST || '127.0.0.1',
+    describe: 'Interface the http transport listens on (env MCP_HOST). /mcp is unauthenticated: '
+      + 'use 0.0.0.0 only behind your own access control',
+  },
   transport: {
     type: 'string',
     default: 'http' as const,
@@ -52,8 +58,8 @@ if (argv.help) {
   process.exit(0);
 }
 
-const { host, user, pass, mcpPort, id, secret, transport, instances, cert, key, ca } = argv;
-const params: CliParams = { host, user, pass, mcpPort, id, secret, instances, cert, key, ca };
+const { host, user, pass, mcpPort, mcpHost, id, secret, transport, instances, cert, key, ca } = argv;
+const params: CliParams = { host, user, pass, mcpPort, mcpHost, id, secret, instances, cert, key, ca };
 
 if (transport === 'stdio') {
   startStdio(params);

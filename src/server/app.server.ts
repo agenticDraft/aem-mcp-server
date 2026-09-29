@@ -78,14 +78,16 @@ const createServer = (params: CliParams = {}) => {
 }
 
 export const startServer = (params: CliParams = {}) => {
-  const { mcpPort = 8502 } = params || {};
+  // Loopback by default: /mcp is unauthenticated (useBasicAuth is commented out above),
+  // so listening on every interface would expose AEM operations to the network.
+  const { mcpPort = 8502, mcpHost = '127.0.0.1' } = params || {};
   const app = createServer(params);
-  app.listen(mcpPort, (error) => {
+  app.listen(mcpPort, mcpHost, (error) => {
     if (error) {
       LOGGER.error('Failed to start server:', error);
       process.exit(1);
     }
-    LOGGER.log(`0. AEM MCP Server listening on port ${mcpPort}`);
+    LOGGER.log(`0. AEM MCP Server listening on ${mcpHost}:${mcpPort}`);
   });
 };
 

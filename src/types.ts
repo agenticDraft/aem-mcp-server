@@ -5,6 +5,8 @@ export type CliParams = {
   id?: string;
   secret?: string;
   mcpPort?: number;
+  /** Interface the http transport binds to. Defaults to loopback: /mcp has no auth. */
+  mcpHost?: string;
   transport?: 'http' | 'stdio';
   instances?: string;
   cert?: string;
