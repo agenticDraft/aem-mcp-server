@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import { handleRequest } from '../mcp/mcp.server-handler.js';
 // import { useBasicAuth } from './app.auth.js';
@@ -6,12 +6,31 @@ import { AEMConnector } from '../aem/aem.connector.js';
 import { config } from '../config.js';
 import { CliParams } from '../types.js';
 import { LOGGER } from '../utils/logger.js';
+import { isOriginAllowed, parseAllowedOrigins } from './app.origin.js';
 
 const createServer = (params: CliParams = {}) => {
   const app = express();
+  const allowedOrigins = parseAllowedOrigins(params.allowedOrigins);
+
+  // MCP Streamable HTTP: validate Origin on every request (DNS rebinding) and
+  // answer 403 when it is present and not allowed. Runs before CORS so a
+  // rejected browser request never reaches a route.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const origin = req.headers.origin;
+    if (isOriginAllowed(origin, allowedOrigins)) {
+      next();
+      return;
+    }
+    LOGGER.warn(`Rejected request from Origin ${origin}`);
+    res.status(403).json({
+      jsonrpc: '2.0',
+      error: { code: -32000, message: `Forbidden: Origin '${origin}' is not allowed` },
+    });
+  });
 
   app.use(cors({
-    origin: '*', // Allow all origins - adjust as needed for production
+    // Reflect only origins that passed the check above; never a blanket '*'.
+    origin: (origin, callback) => callback(null, isOriginAllowed(origin, allowedOrigins)),
     exposedHeaders: ['Mcp-Session-Id']
   }));
   app.use(express.json());
@@ -81,7 +100,14 @@ export const startServer = (params: CliParams = {}) => {
   // Loopback by default: /mcp is unauthenticated (useBasicAuth is commented out above),
   // so listening on every interface would expose AEM operations to the network.
   const { mcpPort = 8502, mcpHost = '127.0.0.1' } = params || {};
-  const app = createServer(params);
+  let app: ReturnType<typeof createServer>;
+  try {
+    app = createServer(params);
+  } catch (error: any) {
+    // Same shape as the stdio transport: one line, no stack, exit 1.
+    process.stderr.write(`Fatal: ${error.message}\n`);
+    process.exit(1);
+  }
   app.listen(mcpPort, mcpHost, (error) => {
     if (error) {
       LOGGER.error('Failed to start server:', error);

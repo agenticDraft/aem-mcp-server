@@ -95,33 +95,44 @@ anyone who can reach the port can run AEM operations with the server's credentia
 connections from other machines, pass `--mcpHost 0.0.0.0` (or set `MCP_HOST`) and put your own
 access control in front of it.
 
+Every request is also checked for a browser `Origin` header, as the MCP spec requires against DNS
+rebinding. Requests without one (desktop clients, curl) and from loopback origins
+(`localhost`, `127.0.0.1`, `[::1]`, any port) are accepted; any other origin gets `403`. To allow a
+browser-based client served from elsewhere, list its origin with `--allowedOrigins`
+(or `MCP_ALLOWED_ORIGINS`), e.g. `--allowedOrigins https://tools.example.com`.
+
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=AEM&config=eyJ1cmwiOiJodHRwOi8vMTI3LjAuMC4xOjg1MDIvbWNwIn0%3D)
 
 ### Configuration
 
 ```
 Options:
-      --version    Show version number                                 [boolean]
+      --version         Show version number                            [boolean]
   -H, --host                         [string] [default: "http://localhost:4502"]
   -u, --user                                         [string] [default: "admin"]
   -p, --pass                                         [string] [default: "admin"]
-  -i, --id         clientId                               [string] [default: ""]
-  -s, --secret     clientSecret                           [string] [default: ""]
+  -i, --id              clientId                          [string] [default: ""]
+  -s, --secret          clientSecret                      [string] [default: ""]
   -m, --mcpPort                                         [number] [default: 8502]
-      --mcpHost    Interface the http transport listens on (env MCP_HOST). /mcp
-                   is unauthenticated: use 0.0.0.0 only behind your own access
-                   control                       [string] [default: "127.0.0.1"]
-  -t, --transport  Transport mode: http (default) or stdio
+      --mcpHost         Interface the http transport listens on (env MCP_HOST).
+                        /mcp is unauthenticated: use 0.0.0.0 only behind your
+                        own access control       [string] [default: "127.0.0.1"]
+      --allowedOrigins  Extra browser origins allowed to call the http
+                        transport, comma-separated (env MCP_ALLOWED_ORIGINS).
+                        Loopback origins are always allowed; "*" disables the
+                        check                             [string] [default: ""]
+  -t, --transport       Transport mode: http (default) or stdio
                            [string] [choices: "http", "stdio"] [default: "http"]
-  -I, --instances  Named AEM instances: "local:http://localhost:4502:admin:admin
-                   ,qa:https://qa.example.com:user:pass"  [string] [default: ""]
-  -C, --cert       Client certificate PEM for mTLS to AEM (env AEM_CERT_PATH).
-                   Requires --key                                       [string]
-  -k, --key        Client private key PEM (env AEM_KEY_PATH). Passphrase via env
-                   AEM_KEY_PASSPHRASE only                              [string]
-      --ca         CA bundle PEM for the AEM server certificate (env
-                   AEM_CA_PATH)                                         [string]
-  -h, --help       Show help                                           [boolean]
+  -I, --instances       Named AEM instances: "local:http://localhost:4502:admin:
+                        admin,qa:https://qa.example.com:user:pass"
+                                                          [string] [default: ""]
+  -C, --cert            Client certificate PEM for mTLS to AEM (env
+                        AEM_CERT_PATH). Requires --key                  [string]
+  -k, --key             Client private key PEM (env AEM_KEY_PATH). Passphrase
+                        via env AEM_KEY_PASSPHRASE only                 [string]
+      --ca              CA bundle PEM for the AEM server certificate (env
+                        AEM_CA_PATH)                                    [string]
+  -h, --help            Show help                                      [boolean]
 ```
 
 **Authentication:**
