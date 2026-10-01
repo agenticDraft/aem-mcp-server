@@ -26,6 +26,37 @@ This project is designed for non-technical persons who want to manage AEM via na
 
 ---
 
+## What this fork adds
+
+This repository is a fork of [easingthemes/aem-mcp-server](https://github.com/easingthemes/aem-mcp-server).
+The changes below were made here by [Zoran Markovic](https://github.com/zmarkoni), starting from a
+client requirement on a real AEM project: the path to AEM demanded a client certificate, and the
+server could not present one. The full story, with test results and limits, is in
+[Letting an AI agent reach AEM behind a client-certificate gate](https://claude.ai/artifact/BMpUTPeTZ6aWDaaGMr4ash).
+
+- **Client certificates (mTLS)** — `--cert`, `--key`, `--ca` for AEM behind a Dispatcher or CDN
+  that requires a client certificate. Works with Basic and OAuth, both transports, and every
+  `--instances` entry. See [Client certificates (mTLS)](#client-certificates-mtls).
+  ([#1](https://github.com/agenticDraft/aem-mcp-server/pull/1))
+- **HTTP transport listens on `127.0.0.1` by default** — `/mcp` has no authentication, so it is no
+  longer reachable from the network unless you pass `--mcpHost`. This is a breaking change for
+  remote setups. ([#5](https://github.com/agenticDraft/aem-mcp-server/pull/5))
+- **`Origin` header validation** — browser requests from non-loopback origins get `403`, as the MCP
+  spec requires against DNS rebinding. `--allowedOrigins` adds exceptions.
+  ([#6](https://github.com/agenticDraft/aem-mcp-server/pull/6))
+
+**These flags are not in the npm package yet.** `npx aem-mcp-server` installs the upstream release
+(1.7.1), which has no `--cert`, `--mcpHost` or `--allowedOrigins`. To use them, build this fork:
+
+```sh
+git clone https://github.com/agenticDraft/aem-mcp-server.git
+cd aem-mcp-server && npm ci && npm run build
+node dist/cli.js -t stdio -H https://aem.example.com -u svc-user -p "$AEM_PASSWORD" \
+  --cert /etc/certs/client.pem --key /etc/certs/client.key
+```
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -146,6 +177,8 @@ aem-mcp --instances "author:http://localhost:4502:admin:admin,publish:http://loc
 All tools will get an `instance` parameter to target a specific instance.
 
 ### Client certificates (mTLS)
+
+*Added in this fork by [Zoran Markovic](https://github.com/zmarkoni) — see [What this fork adds](#what-this-fork-adds) and the [explainer](https://claude.ai/artifact/BMpUTPeTZ6aWDaaGMr4ash).*
 
 Use this when a Dispatcher or CDN in front of AEM requires a client certificate
 (`SSLVerifyClient require`). Without one, every tool fails at the TLS handshake before AEM is
