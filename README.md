@@ -1,4 +1,4 @@
-# AEM MCP Server (aem-mcp-server)
+# AEM MCP Server (mTLS fork)
 
 [![Version](https://img.shields.io/npm/v/aem-mcp-server.svg)](https://npmjs.org/package/aem-mcp-server)
 [![Release Status](https://github.com/easingthemes/aem-mcp-server/actions/workflows/release.yml/badge.svg)](https://github.com/easingthemes/aem-mcp-server/actions/workflows/release.yml)
